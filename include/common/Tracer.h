@@ -17,15 +17,18 @@
 
 #include "common/TracerBase.h"
 #include "opentelemetry/trace/provider.h"
+#include "opentelemetry/nostd/shared_ptr.h"
 
 #define TRACE_SERVICE_SEGCORE "segcore"
 
 namespace milvus::tracer {
 
+namespace trace = opentelemetry::trace;
+namespace nostd = opentelemetry::nostd;
+
 struct TraceConfig {
     std::string exporter;
     float sampleFraction;
-    std::string jaegerURL;
     std::string otlpEndpoint;
     std::string otlpMethod;
     std::string otlpHeaders;
@@ -39,24 +42,23 @@ struct TraceContext {
     const uint8_t* spanID = nullptr;
     uint8_t traceFlags = 0;
 };
-namespace trace = opentelemetry::trace;
 
 void
 initTelemetry(const TraceConfig& cfg);
 
-std::shared_ptr<trace::Tracer>
+nostd::shared_ptr<trace::Tracer>
 GetTracer();
 
-std::shared_ptr<trace::Span>
+nostd::shared_ptr<trace::Span>
 StartSpan(const std::string& name, TraceContext* ctx = nullptr);
 
-std::shared_ptr<trace::Span>
-StartSpan(const std::string& name, const std::shared_ptr<trace::Span>& span);
+nostd::shared_ptr<trace::Span>
+StartSpan(const std::string& name, const nostd::shared_ptr<trace::Span>& span);
 
 void
-SetRootSpan(std::shared_ptr<trace::Span> span);
+SetRootSpan(nostd::shared_ptr<trace::Span> span);
 
-std::shared_ptr<trace::Span>
+nostd::shared_ptr<trace::Span>
 GetRootSpan();
 
 void
@@ -92,18 +94,18 @@ struct AutoSpan {
     // Creates a span with a parent span. If set_as_temp_root is true, this span will temporarily
     // replace the current thread-local root span. The original root span will be saved and restored
     // when this AutoSpan is destroyed.
-    explicit AutoSpan(const std::string& name, const std::shared_ptr<trace::Span>& span, bool set_as_temp_root = false);
+    explicit AutoSpan(const std::string& name, const nostd::shared_ptr<trace::Span>& span, bool set_as_temp_root = false);
 
-    std::shared_ptr<trace::Span>
+    nostd::shared_ptr<trace::Span>
     GetSpan();
 
     ~AutoSpan();
 
  private:
-    std::shared_ptr<trace::Span> span_;
+    nostd::shared_ptr<trace::Span> span_;
     bool is_root_span_;
     bool set_as_temp_root_ = false;
-    std::shared_ptr<trace::Span> previous_root_;
+    nostd::shared_ptr<trace::Span> previous_root_;
 };
 
 }  // namespace milvus::tracer

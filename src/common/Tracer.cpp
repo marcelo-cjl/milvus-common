@@ -25,11 +25,12 @@
 
 #include "log/Log.h"
 #include "nlohmann/json.hpp"
-#include "opentelemetry/exporters/jaeger/jaeger_exporter_factory.h"
 #include "opentelemetry/exporters/ostream/span_exporter_factory.h"
 #include "opentelemetry/exporters/otlp/otlp_grpc_exporter_factory.h"
 #include "opentelemetry/sdk/resource/resource.h"
 #include "opentelemetry/sdk/trace/batch_span_processor_factory.h"
+#include "opentelemetry/sdk/trace/batch_span_processor_options.h"
+#include "opentelemetry/sdk/trace/processor.h"
 #include "opentelemetry/sdk/trace/sampler.h"
 #include "opentelemetry/sdk/trace/samplers/always_on.h"
 #include "opentelemetry/sdk/trace/samplers/parent.h"
@@ -45,13 +46,12 @@ namespace nostd = opentelemetry::nostd;
 
 namespace trace_sdk = opentelemetry::sdk::trace;
 namespace resource = opentelemetry::sdk::resource;
-namespace jaeger = opentelemetry::exporter::jaeger;
 namespace ostream = opentelemetry::exporter::trace;
 namespace otlp = opentelemetry::exporter::otlp;
 
 static std::atomic<bool> enable_trace = true;
-static std::shared_ptr<trace::TracerProvider> noop_trace_provider =
-    std::make_shared<opentelemetry::trace::NoopTracerProvider>();
+static nostd::shared_ptr<trace::TracerProvider> noop_trace_provider =
+    nostd::shared_ptr<trace::TracerProvider>(new opentelemetry::trace::NoopTracerProvider());
 
 void
 initTelemetry(const TraceConfig& cfg) {
@@ -59,12 +59,6 @@ initTelemetry(const TraceConfig& cfg) {
     std::unique_ptr<opentelemetry::sdk::trace::SpanExporter> exporter;
     if (cfg.exporter == "stdout") {
         exporter = ostream::OStreamSpanExporterFactory::Create();
-    } else if (cfg.exporter == "jaeger") {
-        auto opts = jaeger::JaegerExporterOptions{};
-        opts.transport_format = jaeger::TransportFormat::kThriftHttp;
-        opts.endpoint = cfg.jaegerURL;
-        exporter = jaeger::JaegerExporterFactory::Create(opts);
-        LOG_INFO("init jaeger exporter, endpoint: {}", opts.endpoint);
     } else if (cfg.exporter == "otlp") {
         if (cfg.otlpMethod == "http") {
             auto opts = otlp::OtlpHttpExporterOptions{};
@@ -98,12 +92,14 @@ initTelemetry(const TraceConfig& cfg) {
         export_created = false;
     }
     if (export_created) {
-        auto processor = trace_sdk::BatchSpanProcessorFactory::Create(std::move(exporter), {});
+        trace_sdk::BatchSpanProcessorOptions options{};
+        auto processor = trace_sdk::BatchSpanProcessorFactory::Create(std::move(exporter), options);
         resource::ResourceAttributes attributes = {{"service.name", TRACE_SERVICE_SEGCORE}, {"NodeID", cfg.nodeID}};
         auto resource = resource::Resource::Create(attributes);
-        auto sampler = std::make_unique<trace_sdk::ParentBasedSampler>(std::make_shared<trace_sdk::AlwaysOnSampler>());
-        std::shared_ptr<trace::TracerProvider> provider =
-            trace_sdk::TracerProviderFactory::Create(std::move(processor), resource, std::move(sampler));
+        auto sampler = std::unique_ptr<trace_sdk::Sampler>(new trace_sdk::ParentBasedSampler(
+            std::shared_ptr<trace_sdk::Sampler>(new trace_sdk::AlwaysOnSampler())));
+        auto provider_unique = trace_sdk::TracerProviderFactory::Create(std::move(processor), resource, std::move(sampler));
+        auto provider = nostd::shared_ptr<trace::TracerProvider>(provider_unique.release());
         trace::Provider::SetTracerProvider(provider);
         enable_trace.store(true);
     } else {
@@ -112,13 +108,13 @@ initTelemetry(const TraceConfig& cfg) {
     }
 }
 
-std::shared_ptr<trace::Tracer>
+nostd::shared_ptr<trace::Tracer>
 GetTracer() {
     auto provider = trace::Provider::GetTracerProvider();
     return provider->GetTracer(TRACE_SERVICE_SEGCORE, OPENTELEMETRY_SDK_VERSION);
 }
 
-std::shared_ptr<trace::Span>
+nostd::shared_ptr<trace::Span>
 StartSpan(const std::string& name, TraceContext* parentCtx) {
     trace::StartSpanOptions opts;
     if (enable_trace.load() && parentCtx != nullptr && parentCtx->traceID != nullptr && parentCtx->spanID != nullptr) {
@@ -132,8 +128,8 @@ StartSpan(const std::string& name, TraceContext* parentCtx) {
     return GetTracer()->StartSpan(name, opts);
 }
 
-std::shared_ptr<trace::Span>
-StartSpan(const std::string& name, const std::shared_ptr<trace::Span>& span) {
+nostd::shared_ptr<trace::Span>
+StartSpan(const std::string& name, const nostd::shared_ptr<trace::Span>& span) {
     trace::StartSpanOptions opts;
     if (span != nullptr) {
         opts.parent = span->GetContext();
@@ -141,7 +137,7 @@ StartSpan(const std::string& name, const std::shared_ptr<trace::Span>& span) {
     return GetTracer()->StartSpan(name, opts);
 }
 
-thread_local std::shared_ptr<trace::Span> local_span;
+thread_local nostd::shared_ptr<trace::Span> local_span;
 
 std::string
 GetTraceID() {
@@ -165,18 +161,18 @@ GetTraceID() {
 }
 
 void
-SetRootSpan(std::shared_ptr<trace::Span> span) {
+SetRootSpan(nostd::shared_ptr<trace::Span> span) {
     if (enable_trace.load()) {
         local_span = std::move(span);
     }
 }
 
-std::shared_ptr<trace::Span>
+nostd::shared_ptr<trace::Span>
 GetRootSpan() {
     if (enable_trace) {
         return local_span;
     }
-    return nullptr;
+    return nostd::shared_ptr<trace::Span>();
 }
 
 void
@@ -260,7 +256,7 @@ AutoSpan::AutoSpan(const std::string& name, TraceContext* ctx, bool is_root_span
     }
 }
 
-AutoSpan::AutoSpan(const std::string& name, const std::shared_ptr<trace::Span>& parent, bool set_as_temp_root)
+AutoSpan::AutoSpan(const std::string& name, const nostd::shared_ptr<trace::Span>& parent, bool set_as_temp_root)
     : is_root_span_(false), set_as_temp_root_(set_as_temp_root) {
     span_ = StartSpan(name, parent);
     if (set_as_temp_root_ && enable_trace.load()) {
@@ -269,7 +265,7 @@ AutoSpan::AutoSpan(const std::string& name, const std::shared_ptr<trace::Span>& 
     }
 }
 
-std::shared_ptr<trace::Span>
+nostd::shared_ptr<trace::Span>
 AutoSpan::GetSpan() {
     return span_;
 }

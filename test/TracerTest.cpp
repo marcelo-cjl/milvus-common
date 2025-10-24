@@ -9,23 +9,6 @@ using namespace milvus;
 using namespace milvus::tracer;
 using namespace opentelemetry::trace;
 
-TEST(Tracer, Init) {
-    auto config = std::make_shared<TraceConfig>();
-    config->exporter = "stdout";
-    config->nodeID = 1;
-    initTelemetry(*config);
-    auto span = StartSpan("test");
-    ASSERT_TRUE(span->IsRecording());
-
-    config = std::make_shared<TraceConfig>();
-    config->exporter = "jaeger";
-    config->jaegerURL = "http://localhost:14268/api/traces";
-    config->nodeID = 1;
-    initTelemetry(*config);
-    span = StartSpan("test");
-    ASSERT_TRUE(span->IsRecording());
-}
-
 TEST(Tracer, Span) {
     auto config = std::make_shared<TraceConfig>();
     config->exporter = "stdout";

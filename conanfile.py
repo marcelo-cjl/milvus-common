@@ -20,9 +20,10 @@ class MilvusCommonConan(ConanFile):
         "prometheus-cpp/1.1.0#ea9b101cb785943adb40ad82eda7856c",
         "libcurl/7.86.0#bbc887fae3341b3cb776c601f814df05",
         "gflags/2.2.2#b15c28c567c7ade7449cf994168a559f",
-        "opentelemetry-cpp/1.8.1.1@milvus/2.4#7345034855d593047826b0c74d9a0ced",
+        "opentelemetry-cpp/1.14.2",
         "xz_utils/5.4.0#a6d90890193dc851fa0d470163271c7a",
         "zlib/1.2.13#df233e6bed99052f285331b9f54d9070",
+        "zstd/1.5.5#34e9debe03bf0964834a09dfbc31a5dd",
         "libevent/2.1.12#4fd19d10d3bed63b3a8952c923454bc0",
         "openssl/3.1.2#02594c4c0a6e2b4feb3cd15119993597",
         "folly/2023.10.30.10@milvus/dev",
@@ -43,6 +44,9 @@ class MilvusCommonConan(ConanFile):
         "fmt:header_only": True,
         "with_ut": False,
         "with_asan": False,
+        "opentelemetry-cpp:with_otlp_grpc": True,
+        "opentelemetry-cpp:with_otlp_http": True,
+        "openssl:shared": True,
     }
 
     def configure(self):
